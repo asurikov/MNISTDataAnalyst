@@ -1,0 +1,5 @@
+<application>
+  <component name="RefactoringSettings">
+    <option name="INHERITANCE_TO_DELEGATION_DELEGATE_OTHER" value="true" />
+  </component>
+</application>

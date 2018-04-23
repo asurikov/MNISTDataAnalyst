@@ -13,8 +13,8 @@ import java.util.zip.GZIPInputStream;
 
 public class MNISTDataAnalyst {
 
-    int threadsAmount = 2;//todo перепесать хард значения на получаемые
-    int kNeighbor = 10;
+    int threadsAmount = 4;//todo перепесать хард значения на получаемые
+    int kNeighbor = 20;
     MNISTDataSet[] mnistDataTrainingSet;
     int[][] resultSet;
     private Object lock = new Object();
@@ -130,44 +130,33 @@ public class MNISTDataAnalyst {
 
     class calculateEuclideanDistanceThread implements Runnable {
         MNISTDataSet mns;
+        int iCount;
 
-        public calculateEuclideanDistanceThread(MNISTDataSet mns) {
+        public calculateEuclideanDistanceThread(MNISTDataSet mns, int iCount) {
             this.mns = mns;
+            this.iCount = iCount;
         }
 
         @Override
         public void run() {
-            SortedSet<NeighborClassObject> kSet = new TreeSet<NeighborClassObject>(); //Коллекция с к эелементами
-            for (int i = 0; i < mnistDataTrainingSet.length; i++) {
-                double distance = mns.calculateEuclideanDistance(mnistDataTrainingSet[i]);
-                NeighborClassObject neighbor = new NeighborClassObject(mnistDataTrainingSet[i].getLabel(), distance);
-                if (i <= kNeighbor) {
-                    kSet.add(neighbor);
-                } else {
-
-                    if (Double.compare(neighbor.getDistance(), kSet.first().getDistance()) < 0) {
-                        kSet.remove(kSet.last());
-                        kSet.add(neighbor);
-                    }
-                }
-
-            }
-            for (MNISTDataSet item : mnistDataTrainingSet) {
-                mns.calculateEuclideanDistance(item);
-
-            }
+            int returnValue = mns.analyst();
+            int progressBar = resultSet.length;
             synchronized (lock) {
+                resultSet[iCount][0] = mns.label;
+                resultSet[iCount][1] = returnValue;
+                System.out.print((String.format("\rЗавершено: %.1f", ((double) iCount / progressBar * 100)) + "%"));
             }
         }
 
     }
 
+    //метод проверки результата распознования
     public double checkResult() {
         int mistakes = 0;
         for (int i = 0; i < resultSet.length; i++) {
             if (resultSet[i][0] != resultSet[i][1]) mistakes++;
         }
-return (double)mistakes/resultSet.length*100;
+        return (double) mistakes / resultSet.length * 100;
     }
 
     public void run(String pathDataFolder) {
@@ -179,34 +168,28 @@ return (double)mistakes/resultSet.length*100;
         mnistDataTrainingSet = loadMNISTData("Training Set ", trainsetLabelFile, trainsetImageFile);
         MNISTDataSet[] proTestSet = loadMNISTData("Test Set ", testsetLabelFile, testsetImageFile);
         resultSet = new int[proTestSet.length][2];
-        // ExecutorService threadPool = Executors.newFixedThreadPool(kNeighbor);
+        ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         System.out.print("\nРаспознование цифр:");
         for (int i = 0; i < proTestSet.length; i++) {
-            //for (int i = 0; i < 2; i++) {
-            //}
 
-            //for (MNISTDataTrainingSetObject trainItem : proTestSet) {
-            // for (MNISTDataTrainingSetObject trainItem : MNISTDataTrainingSet) {
-            // calculateEuclideanDistanceThread c = new calculateEuclideanDistanceThread(testItem);
-            //  threadPool.execute(c);
-            // System.out.print(proTestSet[i].calculateEuclideanDistance(testItem));
-            resultSet[i][0] = proTestSet[i].label;
-            resultSet[i][1] = proTestSet[i].analyst();
+            calculateEuclideanDistanceThread c = new calculateEuclideanDistanceThread(proTestSet[i], i);
+            threadPool.execute(c);
 
-            System.out.print("\r");
-            System.out.print((String.format("Завершено: %.1f", ((double) i / proTestSet.length * 100)) + "%"));
-            //  System.out.println("Дано " + proTestSet[i].label + "  " + proTestSet[i].analyst());
+            // resultSet[i][0] = proTestSet[i].label;
+            //resultSet[i][1] = proTestSet[i].analyst();
+
+            //System.out.print((String.format("\кЗавершено: %.1f", ((double) i / proTestSet.length * 100)) + "%"));
             // c.run();
-            // System.out.print(".........\r");
+
         }
 
 
-        // threadPool.shutdown();
-        // while (!threadPool.isTerminated()) {
-        //  System.out.print(".........\r");//печатаем бегунок что еще не умерли
-        //  }
+        threadPool.shutdown();
+        while (!threadPool.isTerminated()) {
+            //System.out.print(".........\r");//печатаем бегунок что еще не умерли
+        }
 
-        System.out.println("\nвремя выполнения "+tm.getTime());
+        System.out.println("\nВремя выполнения " + tm.getTime());
 
     }
 

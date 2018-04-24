@@ -4,7 +4,6 @@ import java.io.DataInputStream;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.LinkedList;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
@@ -56,7 +55,32 @@ public class MNISTDataAnalyst {
             this.distance = distance;
         }
     }
+    public class DistanceMethod {
+        public  double EuclideanDistance(MNISTDataSet P, MNISTDataSet Q) {
+            int[] p = P.getImage();
+            int[] q = Q.getImage();
+            if (p.length == q.length) {
+                double sum = 0;
+                for (int i = 0; i < p.length; i++) {
+                    sum += Math.pow((q[i] - p[i]), 2);
+                }
+                return Math.sqrt(sum);
+            } else return -1;
 
+        }
+
+        public double taxicabGeometry(MNISTDataSet P, MNISTDataSet Q) {
+            int[] p = P.getImage();
+            int[] q = Q.getImage();
+            if (p.length == q.length) {
+                double sum = 0;
+                for (int i = 0; i < p.length; i++) {
+                    sum += Math.abs((q[i] - p[i]));
+                }
+                return sum;
+            } else return -1;
+        }
+    }
     class MNISTDataSet {
         int label;
         int[] image;
@@ -85,27 +109,15 @@ public class MNISTDataAnalyst {
             this.image = image;
         }
 
-        public double calculateEuclideanDistance(MNISTDataSet mns) {
-            int[] p = this.getImage();
-            int[] q = mns.getImage();
-            if (p.length == q.length) {
-                double sum = 0;
-                for (int i = 0; i < p.length; i++) {
-                    sum += Math.pow((q[i] - p[i]), 2);
-                }
-                return Math.sqrt(sum);
-            } else return -1;
-
-        }
-
-        public int analyst() {
+        public int analyst(Distance func) {
             SortedSet<NeighborClassObject> neighbours = new TreeSet();
             //  System.out.println("\nДано " + this.label);
 
             for (int i = 0; i < mnistDataTrainingSet.length; i++) {
 
 
-                double distance = this.calculateEuclideanDistance(mnistDataTrainingSet[i]);
+               // double distance = this.EuclideanDistance(mnistDataTrainingSet[i]);
+                double distance = func.returnDistance(this,mnistDataTrainingSet[i]);
                 //    NeighborClassObject neighbor = new NeighborClassObject(MNISTDataTrainingSet[i].getLabel(), distance);
                 if (i <= kNeighbor) {
                     neighbours.add(new NeighborClassObject(mnistDataTrainingSet[i].getLabel(), distance));
@@ -126,7 +138,10 @@ public class MNISTDataAnalyst {
             return MNISTDataTools.indexMaxValue(array);
         }
     }
-
+//Функциональный интерфейс для лямбда выражения
+interface Distance{
+        double returnDistance(MNISTDataSet p, MNISTDataSet q);
+}
 
     class calculateEuclideanDistanceThread implements Runnable {
         MNISTDataSet mns;
@@ -139,11 +154,14 @@ public class MNISTDataAnalyst {
 
         @Override
         public void run() {
-            int returnValue = mns.analyst();
+            DistanceMethod distanceMethod = new DistanceMethod();
+            int returnValueEvklid = mns.analyst(distanceMethod::EuclideanDistance);
+            int taxicabGeometry = mns.analyst(distanceMethod::taxicabGeometry);
             int progressBar = resultSet.length;
             synchronized (lock) {
                 resultSet[iCount][0] = mns.label;
-                resultSet[iCount][1] = returnValue;
+                resultSet[iCount][1] = returnValueEvklid;
+                resultSet[iCount][2] = taxicabGeometry;
                 System.out.print((String.format("\rЗавершено: %.1f", ((double) iCount / progressBar * 100)) + "%"));
             }
         }
@@ -151,12 +169,17 @@ public class MNISTDataAnalyst {
     }
 
     //метод проверки результата распознования
-    public double checkResult() {
-        int mistakes = 0;
+    public void checkResult() {
+        int mistakesEvklid = 0;
+        int mistakesTaxicab = 0;
         for (int i = 0; i < resultSet.length; i++) {
-            if (resultSet[i][0] != resultSet[i][1]) mistakes++;
+            if (resultSet[i][0] != resultSet[i][1]) mistakesEvklid++;
+            if (resultSet[i][0] != resultSet[i][2]) mistakesTaxicab++;
         }
-        return (double) mistakes / resultSet.length * 100;
+        System.out.println("--------------------------------------------------");
+        System.out.println((String.format("Погрешность распознования Евклидовой метрикой: %.1f", (double) mistakesEvklid / resultSet.length * 100) + "%"));
+        System.out.println((String.format("Погрешность распознования методам городских кварталов: %.1f", (double) mistakesTaxicab / resultSet.length * 100) + "%"));
+
     }
 
     public void run(String pathDataFolder) {
@@ -167,7 +190,7 @@ public class MNISTDataAnalyst {
         String testsetImageFile = pathDataFolder + "t10k-images-idx3-ubyte.gz";
         mnistDataTrainingSet = loadMNISTData("Training Set ", trainsetLabelFile, trainsetImageFile);
         MNISTDataSet[] proTestSet = loadMNISTData("Test Set ", testsetLabelFile, testsetImageFile);
-        resultSet = new int[proTestSet.length][2];
+        resultSet = new int[proTestSet.length][3];
         ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         System.out.print("\nРаспознование цифр:");
         for (int i = 0; i < proTestSet.length; i++) {

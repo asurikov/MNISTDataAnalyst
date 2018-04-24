@@ -12,8 +12,7 @@ public class Main {
             System.out.println(current);
             MNISTDataAnalyst mns = new MNISTDataAnalyst();
             mns.run(current);
-            System.out.println("--------------------------------------------------");
-            System.out.println((String.format("Погрешность распознования: %.1f", mns.checkResult()) + "%"));
+mns.checkResult();
         } catch (IOException e) {
             e.printStackTrace();
         }

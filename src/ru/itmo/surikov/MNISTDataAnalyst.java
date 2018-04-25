@@ -12,12 +12,17 @@ import java.util.zip.GZIPInputStream;
 
 public class MNISTDataAnalyst {
 
-    int threadsAmount = 4;//todo перепесать хард значения на получаемые
-    int kNeighbor = 20;
-    MNISTDataSet[] mnistDataTrainingSet;
-    int[][] resultSet;
-    private Object lock = new Object();
+    // int threadsAmount = 4;//todo перепесать хард значения на получаемые
+    int kNeighbor;//Количесто соседей в методе К-ближайших соседей
+    MNISTDataSet[] mnistDataTrainingSet; //Массив содержащий тренировочные данные
+    int[][] resultSet;//массив с результатами распознования. Первый столбец лабел из набора данных MNIST. Второй и третий результат распознования
+    private Object lock = new Object();//мишка среди алкоголиков
 
+    public MNISTDataAnalyst(int kNeighbor) {
+        this.kNeighbor = kNeighbor;
+    }
+
+    //класс соседего объекта содержит лабел и дистанцию до определяемого элемента
     class NeighborClassObject implements Comparable<NeighborClassObject> {
         int label;
         double distance;
@@ -27,6 +32,7 @@ public class MNISTDataAnalyst {
             this.distance = distance;
         }
 
+        //переогрузка для сортировки
         @Override
         public int compareTo(NeighborClassObject o) {
 
@@ -55,8 +61,10 @@ public class MNISTDataAnalyst {
             this.distance = distance;
         }
     }
+
+    //класс с методами для вычисления расстояний различными способами
     public class DistanceMethod {
-        public  double EuclideanDistance(MNISTDataSet P, MNISTDataSet Q) {
+        public double EuclideanDistance(MNISTDataSet P, MNISTDataSet Q) {
             int[] p = P.getImage();
             int[] q = Q.getImage();
             if (p.length == q.length) {
@@ -81,6 +89,8 @@ public class MNISTDataAnalyst {
             } else return -1;
         }
     }
+
+    //класс данных из базы MNIST содержит лабел и массив байт с картинкой
     class MNISTDataSet {
         int label;
         int[] image;
@@ -109,60 +119,67 @@ public class MNISTDataAnalyst {
             this.image = image;
         }
 
+        //метод для определения значения картинки методом К ближайших соседей
         public int analyst(Distance func) {
-            SortedSet<NeighborClassObject> neighbours = new TreeSet();
+            SortedSet<NeighborClassObject> neighbours = new TreeSet();//сортированный список ближайших соседей
             //  System.out.println("\nДано " + this.label);
 
             for (int i = 0; i < mnistDataTrainingSet.length; i++) {
 
 
-               // double distance = this.EuclideanDistance(mnistDataTrainingSet[i]);
-                double distance = func.returnDistance(this,mnistDataTrainingSet[i]);
-                //    NeighborClassObject neighbor = new NeighborClassObject(MNISTDataTrainingSet[i].getLabel(), distance);
+                // double distance = this.EuclideanDistance(mnistDataTrainingSet[i]);
+                double distance = func.returnDistance(this, mnistDataTrainingSet[i]); //вызываем метод определения рассояние между объектами данных MNIST
+                //первые К просто попадают в сортированную коллекцию
                 if (i <= kNeighbor) {
                     neighbours.add(new NeighborClassObject(mnistDataTrainingSet[i].getLabel(), distance));
                 } else {
-
-                    if (Double.compare(distance, neighbours.first().getDistance()) < 0) {
+//если меньше наибольшего, то удаляем его и добавляем нового соседа
+                    if (Double.compare(distance, neighbours.last().getDistance()) < 0) {
                         neighbours.remove(neighbours.last());
                         neighbours.add(new NeighborClassObject(mnistDataTrainingSet[i].getLabel(), distance));
                     }
                 }
             }
+            //подсчитываем частоту с которой встречаються цифры среди соседей
             int[] array = new int[10];
             for (NeighborClassObject item : neighbours) {
                 array[item.label]++;
-                //  System.out.println("Сосед " + item.label);
-            }
 
+            }
+//узнаем индекс(он же и значение) наиболее часто встречающегося элемента)
             return MNISTDataTools.indexMaxValue(array);
         }
     }
-//Функциональный интерфейс для лямбда выражения
-interface Distance{
-        double returnDistance(MNISTDataSet p, MNISTDataSet q);
-}
 
-    class calculateEuclideanDistanceThread implements Runnable {
+    //Функциональный интерфейс для передачи ссылки на метод
+    interface Distance {
+        double returnDistance(MNISTDataSet p, MNISTDataSet q);
+    }
+
+    //класс для организации вычислений по потокам
+    class calculateThread implements Runnable {
         MNISTDataSet mns;
         int iCount;
 
-        public calculateEuclideanDistanceThread(MNISTDataSet mns, int iCount) {
+        public calculateThread(MNISTDataSet mns, int iCount) {
             this.mns = mns;
             this.iCount = iCount;
         }
 
         @Override
         public void run() {
+            //создаем объект класса вычислений
             DistanceMethod distanceMethod = new DistanceMethod();
+            //вызываем аналиста с методом вычислений по формуле Евклида
             int returnValueEvklid = mns.analyst(distanceMethod::EuclideanDistance);
+            //вызываем аналиста с методом вычислений по формуле городских кварталов
             int taxicabGeometry = mns.analyst(distanceMethod::taxicabGeometry);
-            int progressBar = resultSet.length;
+            int lenght = resultSet.length;
             synchronized (lock) {
-                resultSet[iCount][0] = mns.label;
-                resultSet[iCount][1] = returnValueEvklid;
-                resultSet[iCount][2] = taxicabGeometry;
-                System.out.print((String.format("\rЗавершено: %.1f", ((double) iCount / progressBar * 100)) + "%"));
+                resultSet[iCount][0] = mns.label;//данные из базы МНИСТ на текущий элемент
+                resultSet[iCount][1] = returnValueEvklid;//распознали формулой Евклида
+                resultSet[iCount][2] = taxicabGeometry;//распознали формулой Городских кварталов
+                System.out.print((String.format("\rЗавершено: %.1f", ((double) iCount / lenght * 100)) + "%"));
             }
         }
 
@@ -173,8 +190,8 @@ interface Distance{
         int mistakesEvklid = 0;
         int mistakesTaxicab = 0;
         for (int i = 0; i < resultSet.length; i++) {
-            if (resultSet[i][0] != resultSet[i][1]) mistakesEvklid++;
-            if (resultSet[i][0] != resultSet[i][2]) mistakesTaxicab++;
+            if (resultSet[i][0] != resultSet[i][1]) mistakesEvklid++;//ошибки по  формуле Евклида
+            if (resultSet[i][0] != resultSet[i][2]) mistakesTaxicab++;//ошибки по  формуле городских кварталов
         }
         System.out.println("--------------------------------------------------");
         System.out.println((String.format("Погрешность распознования Евклидовой метрикой: %.1f", (double) mistakesEvklid / resultSet.length * 100) + "%"));
@@ -182,32 +199,30 @@ interface Distance{
 
     }
 
+    //запускаем главные процесс MNISTDataAnalyst
     public void run(String pathDataFolder) {
-        Timer tm = new Timer();
+        Timer tm = new Timer();//взводим таймер
         String trainsetLabelFile = pathDataFolder + "train-labels-idx1-ubyte.gz";
         String trainsetImageFile = pathDataFolder + "train-images-idx3-ubyte.gz";
         String testsetLabelFile = pathDataFolder + "t10k-labels-idx1-ubyte.gz";
         String testsetImageFile = pathDataFolder + "t10k-images-idx3-ubyte.gz";
-        mnistDataTrainingSet = loadMNISTData("Training Set ", trainsetLabelFile, trainsetImageFile);
-        MNISTDataSet[] proTestSet = loadMNISTData("Test Set ", testsetLabelFile, testsetImageFile);
-        resultSet = new int[proTestSet.length][3];
-        ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+        mnistDataTrainingSet = loadMNISTData("Training Set ", trainsetLabelFile, trainsetImageFile);//загружаем тренировочную базу
+        MNISTDataSet[] proTestSet = loadMNISTData("Test Set ", testsetLabelFile, testsetImageFile);//загружаем тестовую базу
+        resultSet = new int[proTestSet.length][3]; //иницилизируем массив с результатами
+        ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());//создаем пул потоков с возможным числом потоков равным числу доступных процессоров
         System.out.print("\nРаспознование цифр:");
+        //побежали по тестовой базе по каждому элементу
         for (int i = 0; i < proTestSet.length; i++) {
 
-            calculateEuclideanDistanceThread c = new calculateEuclideanDistanceThread(proTestSet[i], i);
-            threadPool.execute(c);
+            calculateThread c = new calculateThread(proTestSet[i], i);//формируем объект для запуска потока
+            threadPool.execute(c); //запускаем пул
 
-            // resultSet[i][0] = proTestSet[i].label;
-            //resultSet[i][1] = proTestSet[i].analyst();
-
-            //System.out.print((String.format("\кЗавершено: %.1f", ((double) i / proTestSet.length * 100)) + "%"));
-            // c.run();
+            // c.run(); //оказываеться не обязательно так делать поток и так запуститься
 
         }
-
-
         threadPool.shutdown();
+        //прибиваем пул
+        //ждем завершения всех потоков
         while (!threadPool.isTerminated()) {
             //System.out.print(".........\r");//печатаем бегунок что еще не умерли
         }
@@ -216,18 +231,18 @@ interface Distance{
 
     }
 
-
+    //метод загрузки данный из базы MNIST
     private MNISTDataSet[] loadMNISTData(String name, String labelFile, String imageFile) {
         try {
 
 
             try (DataInputStream imageInput = new DataInputStream(new GZIPInputStream(new FileInputStream(imageFile))); DataInputStream labelInput = new DataInputStream(new GZIPInputStream(new FileInputStream(labelFile)));) {
-                int labelMagicNumber = labelInput.readInt();
-                int labelsNumber = labelInput.readInt();
-                int magicNumber = imageInput.readInt();
-                int itemsNumber = imageInput.readInt();
-                int nRows = imageInput.readInt();
-                int nCols = imageInput.readInt();
+                int labelMagicNumber = labelInput.readInt();//"магическое число лайблов"
+                int labelsNumber = labelInput.readInt();//количество лайблов
+                int magicNumber = imageInput.readInt();////"магическое число картинок"
+                int itemsNumber = imageInput.readInt();//количество картинок
+                int nRows = imageInput.readInt();//строки
+                int nCols = imageInput.readInt();//колонки
                 System.out.println("");
                 System.out.println(name);
                 System.out.println("magic number is " + magicNumber);
@@ -236,7 +251,9 @@ interface Distance{
                 System.out.println("number of cols is: " + nCols);
                 System.out.println("labels magic number is: " + labelMagicNumber);
                 System.out.println("number of labels is: " + labelsNumber);
+                //инициллизируем массив с данными
                 MNISTDataSet[] mnistDataSets = new MNISTDataSet[itemsNumber];
+                //заполняем в одномерный массив(изначально читал в двухмерный)
                 for (int i = 0; i < itemsNumber; i++) {
                     int imageSize = nRows * nCols;
                     int[] data = new int[imageSize];
@@ -248,8 +265,8 @@ interface Distance{
 
                     }
                     MNISTDataSet mns = new MNISTDataSet(digit, data);
-                    //mnistDataSets.add(mns);
                     mnistDataSets[i] = mns;
+                    //"прогресбар"
                     System.out.print("\r");
 
                     System.out.print(name + (String.format("Загрузка данных: %.1f", ((double) i / itemsNumber * 100)) + "%"));

@@ -2,14 +2,14 @@ package ru.itmo.surikov;
 
 
 import java.util.Date;
-
+//Класс для подсчета времени
 public class Timer {
     Date beginDate = new Date();
 
     public Timer() {
 
     }
-
+//возврат в челоыекочитемом виде времени
     public String getTime() {
         long delta = new Date().getTime() - beginDate.getTime();
         delta = delta / 1000;
